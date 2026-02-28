@@ -1,0 +1,21 @@
+attribute_id,attribute_name,vendor,file_name,asset_class,definition,data_type,frequency,synonyms,sample_values,regulatory_source,country_coverage,business_owner,data_steward,is_active,last_updated
+1,Ticker,Bloomberg,equity_file.csv,Equity,Unique trading symbol for an equity instrument,String,Real-time,Trading Symbol;Equity Code,AAPL;MSFT,SEC,Global,Equity Ops Team,Market Data Steward,Yes,01-01-2024
+2,RIC,Refinitiv,equity_file.csv,Equity,Reuters Instrument Code used to identify securities,String,Real-time,Reuters Code;Instrument Code,AAPL.O;VOD.L,ESMA,Global,Equity Ops Team,Market Data Steward,Yes,01-01-2024
+3,ISIN,SIX,bond_file.csv,Bond,International Securities Identification Number,String,Daily,Security Identifier;Global ID,US0378331005,ISO,Global,Fixed Income Ops,Reference Data Steward,Yes,01-01-2024
+4,CUSIP,Bloomberg,bond_file.csv,Bond,Committee on Uniform Securities Identification Procedures code,String,Daily,Bond Identifier;CUSIP Code,37833100,FINRA,US,Fixed Income Ops,Reference Data Steward,Yes,01-01-2024
+5,Coupon Rate,Refinitiv,bond_file.csv,Bond,Annual interest rate paid by the issuer on the bond,Decimal,Daily,Bond Interest Rate;Fixed Rate,5.25%,SEC,Global,Fixed Income Desk,Bond Data Steward,Yes,01-01-2024
+6,Maturity Date,SIX,bond_file.csv,Bond,Date on which the bond principal amount becomes due,Date,Static,Bond Expiry Date,31-12-2030,ESMA,EU,Fixed Income Desk,Bond Data Steward,Yes,01-01-2024
+7,Settlement Date,Bloomberg,bond_file.csv,Bond,Date when bond trade is settled,Date,Daily,Trade Settlement Date,01-06-2024,SEC,US,Operations Team,Trade Ops Steward,Yes,01-01-2024
+8,Issuer Name,SIX,bond_file.csv,Bond,Legal name of the bond issuing entity,String,Static,Issuer;Company Name,Apple Inc,ESMA,EU,Issuer Coverage Team,Reference Data Steward,Yes,01-01-2024
+9,Trading Currency,Refinitiv,equity_file.csv,Equity,Currency in which the instrument is traded,String,Real-time,Deal Currency;Trade Currency,USD;EUR,ECB,Global,Equity Ops Team,Market Data Steward,Yes,01-01-2024
+10,Fitch Rating,Bloomberg,bond_file.csv,Bond,Credit rating assigned by Fitch Ratings agency,String,Weekly,Credit Rating;Bond Rating,AA;BBB,Fitch,Global,Risk Team,Risk Data Steward,Yes,01-01-2024
+11,Moody Rating,Refinitiv,bond_file.csv,Bond,Credit rating assigned by Moody's agency,String,Weekly,Credit Score;Bond Rating,A1;Baa2,Moody,Global,Risk Team,Risk Data Steward,Yes,01-01-2024
+12,Country of Risk,SIX,multi_asset.csv,Multi-Asset,Country where issuer is exposed to economic risk,String,Monthly,Risk Country;Country Exposure,US;UK;DE,ESMA,Global,Risk Team,Risk Data Steward,Yes,01-01-2024
+13,Data Frequency,Internal,governance.csv,All,Indicates how frequently the attribute is refreshed,String,Daily,Update Frequency;Refresh Rate,Daily;Weekly;Real-time,Internal Policy,Global,Data Governance,Chief Data Steward,Yes,01-01-2024
+14,Business Owner,Internal,governance.csv,All,Responsible business unit owning the attribute,String,Static,Owner;Business Unit,Equity Ops;Risk Team,Internal Policy,Global,Data Governance,Chief Data Steward,Yes,01-01-2024
+15,Data Steward,Internal,governance.csv,All,Individual responsible for maintaining data quality,String,Static,Data Manager;Steward Name,John Doe,Internal Policy,Global,Data Governance,Chief Data Steward,Yes,01-01-2024
+16,Regulatory Source,Internal,governance.csv,All,Primary regulatory framework governing the attribute,String,Static,Regulator;Supervisory Body,SEC;ESMA;ECB,Internal Policy,Global,Compliance Team,Compliance Steward,Yes,01-01-2024
+17,Last Updated Date,Internal,governance.csv,All,Date when the attribute was last refreshed,Date,Daily,Refresh Date;Update Timestamp,01-05-2024,Internal Policy,Global,Data Governance,Chief Data Steward,Yes,01-01-2024
+18,Bond Yield,Bloomberg,bond_file.csv,Bond,Return earned on holding the bond until maturity,Decimal,Real-time,Yield to Maturity;YTM,4.80%,SEC,Global,Fixed Income Desk,Bond Data Steward,Yes,01-01-2024
+19,Equity Price,Bloomberg,equity_file.csv,Equity,Current market price of the equity instrument,Decimal,Real-time,Market Price;Last Price,185.22,SEC,Global,Equity Trading Desk,Market Data Steward,Yes,01-01-2024
+20,Issue Date,SIX,bond_file.csv,Bond,Date when the bond was originally issued,Date,Static,Original Issue Date,01-01-2020,ESMA,EU,Fixed Income Desk,Bond Data Steward,Yes,01-01-2024
