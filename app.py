@@ -1,96 +1,212 @@
 import streamlit as st
-from search_engine import MetadataSearchEngine
+import pandas as pd
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from datetime import datetime
 
-# ---------------------------
-# Page Config
-# ---------------------------
-st.set_page_config(page_title="Talk2Acquisition AI", layout="wide")
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
+st.set_page_config(page_title="Talk2Acquisition", layout="wide")
+st.title("Talk2Acquisition – AI Acquisition Intelligence Engine")
 
-st.title("💬 Talk2Acquisition - AI Metadata Assistant")
+# -------------------------------------------------
+# LOAD DATA
+# -------------------------------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_csv("talk2acquisition_master_metadata_v2.csv")
+    df.fillna("")
+    return df
 
-# ---------------------------
-# Load Search Engine (Cached)
-# ---------------------------
+df = load_data()
+
+# -------------------------------------------------
+# LOAD MODEL
+# -------------------------------------------------
 @st.cache_resource
-def load_engine():
-    return MetadataSearchEngine("talk2acquisition_master_metadata_v2.csv")
+def load_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
 
-engine = load_engine()
+model = load_model()
 
-# ---------------------------
-# Sidebar Filters
-# ---------------------------
-st.sidebar.header("🔎 Filters")
-
-selected_vendor = st.sidebar.selectbox(
-    "Vendor",
-    ["All"] + sorted(engine.df["vendor"].unique().tolist())
+# -------------------------------------------------
+# PREP SEARCH TEXT
+# -------------------------------------------------
+df["search_text"] = (
+    df["attribute_name"].astype(str) + " " +
+    df["definition"].astype(str) + " " +
+    df["synonyms"].astype(str) + " " +
+    df["vendor"].astype(str) + " " +
+    df["asset_class"].astype(str)
 )
 
-selected_asset = st.sidebar.selectbox(
-    "Asset Class",
-    ["All"] + sorted(engine.df["asset_class"].unique().tolist())
-)
+@st.cache_data
+def generate_embeddings(texts):
+    return model.encode(texts, show_progress_bar=False)
 
-# ---------------------------
-# Chat History State
-# ---------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+embeddings = generate_embeddings(df["search_text"].tolist())
 
-# Display previous messages
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# -------------------------------------------------
+# SEARCH
+# -------------------------------------------------
+def search(query):
+    query_embedding = model.encode([query])
+    similarity = cosine_similarity(query_embedding, embeddings)[0]
+    temp_df = df.copy()
+    temp_df["similarity"] = similarity
+    return temp_df.sort_values("similarity", ascending=False).head(25)
 
-# ---------------------------
-# User Input
-# ---------------------------
-query = st.chat_input("Ask about any data attribute...")
+# -------------------------------------------------
+# ATTRIBUTE DETECTION
+# -------------------------------------------------
+def detect_best_attribute(results, query):
+    grouped = results.groupby("attribute_name")
+    attribute_scores = []
+    query_lower = query.lower()
+
+    for attribute, group in grouped:
+        avg_sim = group["similarity"].mean()
+        max_sim = group["similarity"].max()
+        count_weight = len(group) / 25
+
+        attribute_score = 0.5*avg_sim + 0.3*max_sim + 0.2*count_weight
+
+        if attribute.lower() in query_lower:
+            attribute_score += 0.20
+
+        synonyms_text = " ".join(group["synonyms"].astype(str)).lower()
+        if any(word in synonyms_text for word in query_lower.split()):
+            attribute_score += 0.10
+
+        attribute_scores.append({
+            "attribute_name": attribute,
+            "attribute_score": attribute_score
+        })
+
+    score_df = pd.DataFrame(attribute_scores)
+    score_df = score_df.sort_values("attribute_score", ascending=False)
+    return score_df.iloc[0]
+
+# -------------------------------------------------
+# VENDOR SCORING LOGIC
+# -------------------------------------------------
+def vendor_score(row):
+
+    score = 0
+
+    # Active weight
+    if row["is_active"] == "Yes":
+        score += 40
+
+    # Frequency weight
+    freq_weight = {
+        "Real-time": 25,
+        "Intraday": 20,
+        "Daily": 15,
+        "Weekly": 10,
+        "Monthly": 5,
+        "Static": 2
+    }
+    score += freq_weight.get(row["frequency"], 0)
+
+    # Regulatory weight
+    if row["regulatory_source"] in ["ISO","SEC","ESMA","FCA","Basel","MiFID","IFRS"]:
+        score += 20
+
+    # Recency weight
+    try:
+        last_updated = pd.to_datetime(row["last_updated"])
+        days_old = (datetime.now() - last_updated).days
+        if days_old < 30:
+            score += 15
+        elif days_old < 90:
+            score += 10
+        else:
+            score += 5
+    except:
+        pass
+
+    return score
+
+# -------------------------------------------------
+# MAIN QUERY
+# -------------------------------------------------
+query = st.text_input("Ask a metadata or governance question")
 
 if query:
-    # Store user message
-    st.session_state.messages.append({"role": "user", "content": query})
 
-    with st.chat_message("user"):
-        st.markdown(query)
+    results = search(query)
+    best_attribute = detect_best_attribute(results, query)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+    top_attribute = best_attribute["attribute_name"]
+    confidence_score = best_attribute["attribute_score"]
 
-            results = engine.search(query)
+    if confidence_score < 0.32:
+        st.warning("Attribute not confidently identified. Initiate onboarding.")
 
-            # Apply sidebar filters
-            if selected_vendor != "All":
-                results = [r for r in results if r["vendor"] == selected_vendor]
+    else:
+        st.subheader(f"Attribute Identified: {top_attribute}")
+        st.write(f"Detection Confidence: {round(confidence_score*100,2)}%")
 
-            if selected_asset != "All":
-                results = [r for r in results if r["asset_class"] == selected_asset]
+        grouped = df[df["attribute_name"] == top_attribute].copy()
 
-            if not results:
-                response = "❌ No strong match found."
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-            else:
-                # Render structured output
-                for i, r in enumerate(results[:5], 1):
-                    st.markdown(f"### #{i} 📌 {r['attribute_name']}")
+        # Apply scoring
+        grouped["vendor_score"] = grouped.apply(vendor_score, axis=1)
 
-                    st.markdown(f"**🏢 Vendor:** {r['vendor']}")
-                    st.markdown(f"**📊 Asset Class:** {r['asset_class']}")
-                    st.markdown(f"**📝 Definition:** {r['definition']}")
-                    st.markdown(f"**🔄 Frequency:** {r['frequency']}")
-                    st.markdown(f"**👤 Business Owner:** {r['business_owner']}")
-                    st.markdown(f"**🧑‍💼 Data Steward:** {r['data_steward']}")
-                    st.markdown(f"**🏛 Regulatory Source:** {r['regulatory_source']}")
-                    st.markdown(
-                        f"**⭐ Confidence:** {r['confidence']}  |  📊 Similarity: {r['similarity']}%"
-                    )
+        # Sort by score
+        grouped = grouped.sort_values("vendor_score", ascending=False)
 
-                    st.divider()
+        st.markdown("### Available Vendors (AI Ranked)")
+        st.dataframe(grouped.drop(columns=["search_text"]),
+                     use_container_width=True)
 
-                # Store plain text summary in chat history (optional minimal log)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"Returned top {min(len(results),5)} results."
-                })
+        # Recommended vendor
+        recommended_vendor = grouped.iloc[0]["vendor"]
+        st.success(f"⭐ Recommended Vendor: {recommended_vendor}")
+
+        # Vendor selection
+        selected_vendor = st.selectbox(
+            "Choose vendor (override allowed):",
+            grouped["vendor"].unique()
+        )
+
+        selected_row = grouped[grouped["vendor"] == selected_vendor].iloc[0]
+
+        # -------------------------------------------------
+        # FULL METADATA DISPLAY
+        # -------------------------------------------------
+        st.markdown("### Selected Vendor Details")
+
+        col1, col2 = st.columns(2)
+        columns = list(selected_row.index)
+
+        if "search_text" in columns:
+            columns.remove("search_text")
+
+        half = len(columns)//2
+
+        with col1:
+            for col in columns[:half]:
+                st.write(f"**{col}** : {selected_row[col]}")
+
+        with col2:
+            for col in columns[half:]:
+                st.write(f"**{col}** : {selected_row[col]}")
+
+        # -------------------------------------------------
+        # DOWNLOAD BUTTON
+        # -------------------------------------------------
+        download_df = selected_row.to_frame().T
+        csv = download_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="📥 Download Selected Metadata",
+            data=csv,
+            file_name=f"{top_attribute}_{selected_vendor}_metadata.csv",
+            mime="text/csv"
+        )
+
+        # Confirm
+        if st.button("Confirm Consumption"):
+            st.success("Consumption request captured (POC mode).")
