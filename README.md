@@ -1,4 +1,4 @@
-# Talk2Acquisition - AI Metadata Assistant
+# AskMetadata-AI - AI Metadata Assistant
 
 An AI-powered semantic metadata search engine built using Streamlit and Sentence Transformers.
 
