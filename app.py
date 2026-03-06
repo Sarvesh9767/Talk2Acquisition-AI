@@ -1,24 +1,35 @@
 import streamlit as st
-import pandas as pd
 from search_engine import MetadataSearchEngine
+import pandas as pd
 
 # -----------------------------
-# Page Configuration
+# PAGE CONFIG
 # -----------------------------
 st.set_page_config(
     page_title="AskMetadata",
-    page_icon="🤖",
+    page_icon="📊",
     layout="wide"
 )
 
 # -----------------------------
-# Title
+# TITLE
 # -----------------------------
-st.title("🤖 AskMetadata – AI Metadata Assistant")
+st.title("📊 AskMetadata – AI Metadata Assistant")
 st.write("Ask governance or metadata-related questions.")
 
+st.markdown(
+"""
+Examples:
+
+• Is ISIN active?  
+• Who owns coupon rate?  
+• What is update frequency of equity price?  
+• Regulatory source for bond yield?  
+"""
+)
+
 # -----------------------------
-# Load Engine
+# LOAD ENGINE
 # -----------------------------
 @st.cache_resource
 def load_engine():
@@ -27,47 +38,80 @@ def load_engine():
 engine = load_engine()
 
 # -----------------------------
-# Chat History
+# SIDEBAR FILTERS
+# -----------------------------
+st.sidebar.header("Filters")
+
+vendor_filter = st.sidebar.selectbox(
+    "Vendor",
+    ["All", "Bloomberg", "Refinitiv", "SIX", "Internal"]
+)
+
+asset_filter = st.sidebar.selectbox(
+    "Asset Class",
+    ["All", "Equity", "Bond", "FX", "All"]
+)
+
+# -----------------------------
+# CHAT HISTORY
 # -----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# -----------------------------
-# Display Previous Messages
-# -----------------------------
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # -----------------------------
-# Chat Input
+# USER INPUT
 # -----------------------------
-query = st.chat_input("Ask a metadata question...")
+query = st.chat_input("Ask about any data attribute")
 
 if query:
 
-    # Save user message
     st.session_state.messages.append({"role": "user", "content": query})
 
     with st.chat_message("user"):
         st.markdown(query)
 
-    # AI Response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Searching metadata..."):
 
-            results = engine.search(query)
+            results, detected_filters = engine.search(query)
+
+            # Apply manual filters
+            if vendor_filter != "All":
+                results = results[results["vendor"] == vendor_filter]
+
+            if asset_filter != "All":
+                results = results[results["asset_class"] == asset_filter]
 
             if len(results) == 0:
-                response = "❌ No matching metadata found."
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                response = "Attribute not confidently identified. Initiate onboarding request."
+                st.write(response)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
 
             else:
 
-                response_text = ""
+                full_response = ""
+
+                st.subheader("🔎 AI Search Results")
+
+                if detected_filters.get("asset_class"):
+                    st.info(f"🤖 AI detected Asset Class: {detected_filters['asset_class']}")
 
                 for i, row in results.iterrows():
+
+                    similarity_pct = round(row["similarity"] * 100, 2)
+
+                    if similarity_pct > 75:
+                        confidence = "🟢 High"
+                    elif similarity_pct > 55:
+                        confidence = "🟡 Moderate"
+                    else:
+                        confidence = "🔴 Low"
 
                     block = f"""
 # 📌 {row['attribute_name']}
@@ -86,11 +130,13 @@ if query:
 
 🏛 Regulatory Source: {row['regulatory_source']}
 
-⭐ Confidence: {row['confidence']} | 📊 Similarity: {row['similarity']:.2f}%
+⭐ Confidence: {confidence} | 📊 Similarity: {similarity_pct}%
 """
 
                     st.markdown(block)
 
-                    response_text += block
+                    full_response += block
 
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": full_response}
+                )
