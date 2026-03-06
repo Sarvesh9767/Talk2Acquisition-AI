@@ -2,141 +2,128 @@ import streamlit as st
 from search_engine import MetadataSearchEngine
 import pandas as pd
 
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
-st.set_page_config(
-    page_title="AskMetadata",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="AskMetadata", layout="wide")
 
-# -----------------------------
-# TITLE
-# -----------------------------
 st.title("📊 AskMetadata – AI Metadata Assistant")
-st.write("Ask governance or metadata-related questions.")
+st.write("Ask governance or metadata related questions.")
 
-st.markdown(
+st.write(
 """
 Examples:
 
 • Is ISIN active?  
 • Who owns coupon rate?  
 • What is update frequency of equity price?  
-• Regulatory source for bond yield?  
+• Regulatory source for bond yield?
 """
 )
 
-# -----------------------------
-# LOAD ENGINE
-# -----------------------------
 @st.cache_resource
 def load_engine():
-    return MetadataSearchEngine("talk2acquisition_master_metadata_v2.csv")
+    return MetadataSearchEngine()
 
 engine = load_engine()
 
-# -----------------------------
-# SIDEBAR FILTERS
-# -----------------------------
-st.sidebar.header("Filters")
-
-vendor_filter = st.sidebar.selectbox(
-    "Vendor",
-    ["All", "Bloomberg", "Refinitiv", "SIX", "Internal"]
-)
-
-asset_filter = st.sidebar.selectbox(
-    "Asset Class",
-    ["All", "Equity", "Bond", "FX", "All"]
-)
-
-# -----------------------------
-# CHAT HISTORY
-# -----------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# -----------------------------
-# USER INPUT
-# -----------------------------
-query = st.chat_input("Ask about any data attribute")
+query = st.chat_input("Ask about metadata attributes...")
 
 if query:
 
-    st.session_state.messages.append({"role": "user", "content": query})
-
-    with st.chat_message("user"):
-        st.markdown(query)
+    st.chat_message("user").write(query)
 
     with st.chat_message("assistant"):
+
         with st.spinner("Searching metadata..."):
 
-            results, detected_filters = engine.search(query)
+            results = engine.search(query)
 
-            # Apply manual filters
-            if vendor_filter != "All":
-                results = results[results["vendor"] == vendor_filter]
+        if len(results) == 0:
+            st.warning("No metadata found.")
+        else:
 
-            if asset_filter != "All":
-                results = results[results["asset_class"] == asset_filter]
+            st.subheader("🔎 AI Search Results")
 
-            if len(results) == 0:
-                response = "Attribute not confidently identified. Initiate onboarding request."
-                st.write(response)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": response}
-                )
+            for i, row in results.iterrows():
 
-            else:
+                similarity_pct = round(row["similarity"] * 100, 2)
 
-                full_response = ""
+                st.markdown(
+f"""
+### #{i+1} 📌 {row['attribute_name']}
 
-                st.subheader("🔎 AI Search Results")
+🏢 **Vendor:** {row['vendor']}
 
-                if detected_filters.get("asset_class"):
-                    st.info(f"🤖 AI detected Asset Class: {detected_filters['asset_class']}")
+📊 **Asset Class:** {row['asset_class']}
 
-                for i, row in results.iterrows():
+📝 **Definition:** {row['definition']}
 
-                    similarity_pct = round(row["similarity"] * 100, 2)
+🔄 **Frequency:** {row['frequency']}
 
-                    if similarity_pct > 75:
-                        confidence = "🟢 High"
-                    elif similarity_pct > 55:
-                        confidence = "🟡 Moderate"
-                    else:
-                        confidence = "🔴 Low"
+👤 **Business Owner:** {row['business_owner']}
 
-                    block = f"""
-# 📌 {row['attribute_name']}
+🧑‍💼 **Data Steward:** {row['data_steward']}
 
-🏢 Vendor: {row['vendor']}
+🏛 **Regulatory Source:** {row['regulatory_source']}
 
-📊 Asset Class: {row['asset_class']}
-
-📝 Definition: {row['definition']}
-
-🔄 Frequency: {row['frequency']}
-
-👤 Business Owner: {row['business_owner']}
-
-🧑‍💼 Data Steward: {row['data_steward']}
-
-🏛 Regulatory Source: {row['regulatory_source']}
-
-⭐ Confidence: {confidence} | 📊 Similarity: {similarity_pct}%
+⭐ **Confidence:** {row['confidence']} | 📊 **Similarity:** {similarity_pct}%
 """
-
-                    st.markdown(block)
-
-                    full_response += block
-
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": full_response}
                 )
+
+            st.divider()
+
+            st.subheader("📋 Selected Vendor Details")
+
+            selected_index = st.selectbox(
+                "Choose vendor record",
+                results.index,
+                format_func=lambda x: f"{results.loc[x,'attribute_name']} ({results.loc[x,'vendor']})"
+            )
+
+            selected = results.loc[selected_index]
+
+            detail_df = pd.DataFrame({
+                "Field":[
+                    "attribute_id",
+                    "attribute_name",
+                    "vendor",
+                    "file_name",
+                    "asset_class",
+                    "definition",
+                    "data_type",
+                    "frequency",
+                    "synonyms",
+                    "sample_values",
+                    "regulatory_source",
+                    "country_coverage",
+                    "business_owner",
+                    "data_steward",
+                    "is_active",
+                    "last_updated"
+                ],
+                "Value":[
+                    selected["attribute_id"],
+                    selected["attribute_name"],
+                    selected["vendor"],
+                    selected["file_name"],
+                    selected["asset_class"],
+                    selected["definition"],
+                    selected["data_type"],
+                    selected["frequency"],
+                    selected["synonyms"],
+                    selected["sample_values"],
+                    selected["regulatory_source"],
+                    selected["country_coverage"],
+                    selected["business_owner"],
+                    selected["data_steward"],
+                    selected["is_active"],
+                    selected["last_updated"]
+                ]
+            })
+
+            st.table(detail_df)
+
+            st.download_button(
+                label="⬇ Download Selected Metadata",
+                data=detail_df.to_csv(index=False),
+                file_name="selected_metadata.csv",
+                mime="text/csv"
+            )
