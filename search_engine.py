@@ -5,57 +5,55 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 class MetadataSearchEngine:
-
-    def __init__(self, csv_path="talk2acquisition_master_metadata_v2.csv"):
-        print("Loading metadata dataset...")
-
+    def __init__(self, csv_path):
         self.df = pd.read_csv(csv_path)
 
-        self.df.fillna("", inplace=True)
+        # Load embedding model
+        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-        print("Loading AI model...")
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-
-        print("Generating embeddings...")
-
-        self.df["combined_text"] = (
-            self.df["attribute_name"].astype(str) + " " +
-            self.df["definition"].astype(str) + " " +
-            self.df["synonyms"].astype(str)
+        # Create embedding text dynamically from ALL columns
+        self.df["embedding_text"] = self.df.apply(
+            lambda row: self._build_embedding_text(row), axis=1
         )
 
         self.embeddings = self.model.encode(
-            self.df["combined_text"].tolist(),
+            self.df["embedding_text"].tolist(),
             convert_to_numpy=True
         )
 
-        print("Embeddings ready.")
+    def _build_embedding_text(self, row):
+        text_parts = []
 
-    def get_confidence(self, score):
+        for col in self.df.columns:
+            value = row[col]
+            if pd.notna(value):
+                text_parts.append(f"{col} is {value}")
 
-        if score > 0.75:
-            return "Very High"
-        elif score > 0.60:
+        return ". ".join(text_parts)
+
+    def _confidence_label(self, similarity_percent):
+        if similarity_percent > 75:
             return "High"
-        elif score > 0.45:
+        elif similarity_percent > 55:
             return "Moderate"
-        elif score > 0.30:
-            return "Low"
         else:
-            return "Very Low"
+            return "Low"
 
     def search(self, query, top_k=5):
-
-        query_embedding = self.model.encode([query])
-
+        query_embedding = self.model.encode([query], convert_to_numpy=True)
         similarities = cosine_similarity(query_embedding, self.embeddings)[0]
 
         top_indices = similarities.argsort()[-top_k:][::-1]
 
-        results = self.df.iloc[top_indices].copy()
+        results = []
 
-        results["similarity"] = similarities[top_indices]
+        for idx in top_indices:
+            similarity_percent = float(similarities[idx]) * 100
 
-        results["confidence"] = results["similarity"].apply(self.get_confidence)
+            row_data = self.df.iloc[idx].to_dict()
+            row_data["similarity"] = similarity_percent
+            row_data["confidence"] = self._confidence_label(similarity_percent)
 
-        return results.reset_index(drop=True)
+            results.append(row_data)
+
+        return results
